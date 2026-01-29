@@ -72,6 +72,27 @@ export interface BuildArtifact {
   sha256: string
 }
 
+export interface BuildStartRequest {
+  serverId: string
+  projectPath: string
+  buildDir?: string
+  machine?: string
+  image: string
+  extraArgs?: string
+}
+
+export interface BuildStatus {
+  isBuilding: boolean
+  job: BuildJob | null
+  lastExitCode?: number
+  lastError?: string
+}
+
+export interface BuildLogEvent {
+  type: 'stdout' | 'stderr' | 'system'
+  data: string
+}
+
 // ============================================
 // 파일 시스템 관련 타입
 // ============================================

@@ -9,6 +9,7 @@ import { registerWindowHandlers } from './window-handlers'
 import { registerProjectHandlers } from './project-handlers'
 import { registerSshHandlers, setMainWindow } from './ssh-handlers'
 import { registerAllNewHandlers, setIndexMainWindow } from './index-handlers'
+import { registerBuildHandlers, setBuildMainWindow } from './build-handlers'
 
 /**
  * 모든 IPC 핸들러 등록
@@ -18,6 +19,7 @@ export function registerIpcHandlers(): void {
   registerWindowHandlers()
   registerProjectHandlers()
   registerSshHandlers()
+  registerBuildHandlers()
   
   // 새로운 고성능 핸들러 (SQLite + FTS5 + LRU Cache + LSP)
   registerAllNewHandlers()
@@ -31,4 +33,5 @@ export function registerIpcHandlers(): void {
 export function setIpcMainWindow(window: BrowserWindow): void {
   setMainWindow(window)
   setIndexMainWindow(window)
+  setBuildMainWindow(window)
 }

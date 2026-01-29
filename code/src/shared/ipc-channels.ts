@@ -56,6 +56,7 @@ export const BUILD_CHANNELS = {
   STOP_BUILD: 'build:stop',
   GET_STATUS: 'build:getStatus',
   ON_LOG: 'build:onLog',
+  STATUS_CHANGED: 'build:statusChanged',
   GET_ARTIFACTS: 'build:getArtifacts',
   DOWNLOAD_ARTIFACT: 'build:downloadArtifact',
 } as const
