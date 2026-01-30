@@ -20,6 +20,13 @@ interface TabConfig {
   label: string
 }
 
+interface BuildPreset {
+  id: string
+  label: string
+  target: string
+  extraArgs: string
+}
+
 const tabs: TabConfig[] = [
   { id: 'explorer', icon: '📁', label: '탐색기' },
   { id: 'layers', icon: '📚', label: '레이어' },
@@ -27,9 +34,44 @@ const tabs: TabConfig[] = [
   { id: 'build', icon: '🔨', label: '빌드' },
 ]
 
+const BUILD_PRESETS: BuildPreset[] = [
+  {
+    id: 'compile-bootloader',
+    label: 'Compile: virtual/bootloader (-C compile)',
+    target: 'virtual/bootloader',
+    extraArgs: '-C compile',
+  },
+  {
+    id: 'compile-kernel',
+    label: 'Compile: virtual/kernel (-C compile)',
+    target: 'virtual/kernel',
+    extraArgs: '-C compile',
+  },
+  {
+    id: 'image-ubuntu-base',
+    label: 'Image: fsl-image-ubuntu-base (-C image)',
+    target: 'fsl-image-ubuntu-base',
+    extraArgs: '-C image',
+  },
+  {
+    id: 'configure-kernel',
+    label: 'Configure: virtual/kernel (-C configure)',
+    target: 'virtual/kernel',
+    extraArgs: '-C configure',
+  },
+  {
+    id: 'image-auto',
+    label: 'Image: fsl-image-auto (-C image)',
+    target: 'fsl-image-auto',
+    extraArgs: '-C image',
+  },
+]
+
+const PRESET_TARGETS = Array.from(new Set(BUILD_PRESETS.map((preset) => preset.target)))
+
 export function Sidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('explorer')
-  const { serverProject, currentProject } = useProjectStore()
+  const { serverProject } = useProjectStore()
   const { connectionStatus } = useSshStore()
 
   // 서버 연결 시 서버 탐색기, 아니면 로컬 탐색기
@@ -112,19 +154,18 @@ function BuildPanel() {
   const [optionsSource, setOptionsSource] = useState<'none' | 'quick'>('none')
   const [optionsLoading, setOptionsLoading] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [presetSelection, setPresetSelection] = useState('')
 
-  const { hasConnection, hasProject, canUsePanel, canBuild } = useMemo(() => {
+  const { hasConnection, canUsePanel } = useMemo(() => {
     const connected = Boolean(connectionStatus.connected && activeProfile)
     const projectReady = Boolean(serverProject)
     return {
       hasConnection: connected,
-      hasProject: projectReady,
       canUsePanel: connected && projectReady,
-      canBuild: connected && projectReady && bspInitialized,
     }
-  }, [connectionStatus.connected, activeProfile, serverProject, bspInitialized])
+  }, [connectionStatus.connected, activeProfile, serverProject])
 
-  const quoteForShell = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`
+  const quoteForShell = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`
 
   const parseList = (text: string) =>
     text
@@ -145,8 +186,8 @@ function BuildPanel() {
       const buildDir = config.buildDir.trim() || 'build'
       const base = `cd ${quoteForShell(projectPath)} &&`
 
-      const machineCmd = `${base} find ./sources -type f -path \"*/conf/machine/*.conf\" -print 2>/dev/null | sed \"s#.*/##\" | sed \"s/\\.conf$//\" | sort -u`
-      const targetCmd = `${base} find ./sources -type f -name \"*.bb\" -path \"*/recipes-*/*image*/*.bb\" -print 2>/dev/null | sed \"s#.*/##\" | sed \"s/\\.bb$//\" | sort -u`
+      const machineCmd = `${base} find ./sources -type f -path "*/conf/machine/*.conf" -print 2>/dev/null | sed "s#.*/##" | sed "s/\\.conf$//" | sort -u`
+      const targetCmd = `${base} find ./sources -type f -name "*.bb" -path "*/recipes-*/*image*/*.bb" -print 2>/dev/null | sed "s#.*/##" | sed "s/\\.bb$//" | sort -u`
 
       const [machineRes, targetRes] = await Promise.all([
         window.electronAPI.ssh.exec(serverId, `bash -lc ${quoteForShell(machineCmd)}`),
@@ -154,13 +195,13 @@ function BuildPanel() {
       ])
 
       let machineList = parseList(machineRes.stdout)
-      let targetList = parseList(targetRes.stdout)
+      const targetList = parseList(targetRes.stdout)
 
       // local.conf에서 MACHINE 힌트
       try {
         const localConfPath = `${projectPath}/${buildDir}/conf/local.conf`
         const localConf = await window.electronAPI.ssh.readFile(serverId, localConfPath)
-        const match = localConf.match(/^\s*MACHINE\s*(\?=|=)\s*\"?([^\"\n]+)\"?/m)
+        const match = localConf.match(/^\s*MACHINE\s*(\?=|=)\s*"?([^"\n]+)"?/m)
         if (match?.[2]) {
           const detected = match[2].trim()
           machineList = [detected, ...machineList]
@@ -172,9 +213,6 @@ function BuildPanel() {
         // ignore
       }
 
-      // 일반적으로 자주 쓰는 타깃 힌트
-      targetList = ['virtual/kernel', 'virtual/bootloader', ...targetList]
-
       const mergedMachines = mergeUnique(machineList)
       const mergedTargets = mergeUnique(targetList)
 
@@ -182,17 +220,24 @@ function BuildPanel() {
       setTargets(mergedTargets)
       setOptionsSource('quick')
 
-      if (!config.image.trim() && mergedTargets.length > 0) {
+      if (mergedTargets.length > 0) {
         const preferred =
           mergedTargets.find((t) => t === 'fsl-image-auto') ||
           mergedTargets.find((t) => t === 'core-image-minimal') ||
           mergedTargets[0]
-        if (preferred) {
-          setConfig({ image: preferred })
+        const current = config.image.trim()
+        const isValid =
+          Boolean(current) &&
+          (mergedTargets.includes(current) || PRESET_TARGETS.includes(current))
+        if (!isValid) {
+          if (preferred) {
+            setConfig({ image: preferred })
+          }
         }
       }
-    } catch (err: any) {
-      setOptionsError(err?.message || '옵션 로드 실패')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '옵션 로드 실패'
+      setOptionsError(message)
     } finally {
       setOptionsLoading(false)
     }
@@ -219,7 +264,49 @@ function BuildPanel() {
   useEffect(() => {
     if (!canUsePanel) return
     void loadQuickOptions()
-  }, [canUsePanel, serverProject?.path, activeProfile?.id, config.buildDir])
+  }, [canUsePanel, serverProject?.path, activeProfile?.id, config.buildDir, bspMachine])
+
+  const targetOptions = useMemo(
+    () => mergeUnique([...PRESET_TARGETS, ...targets]),
+    [targets]
+  )
+
+  const machineOptions = useMemo(
+    () => mergeUnique(machines),
+    [machines]
+  )
+
+  const selectedTarget = targetOptions.includes(config.image) ? config.image : ''
+  const selectedMachine = machineOptions.includes(config.machine) ? config.machine : ''
+  const canBuild = canUsePanel && bspInitialized && Boolean(selectedTarget)
+
+  const commandPreview = useMemo(() => {
+    const projectPath = serverProject?.path || '<project>'
+    const buildDir = config.buildDir.trim() || 'build'
+    const image = config.image.trim() || '<select target>'
+    const extraArgs = config.extraArgs.trim()
+    const machine = config.machine.trim()
+
+    const lines = [
+      `cd ${quoteForShell(projectPath)}`,
+      `if [ -f "oe-init-build-env" ]; then . ./oe-init-build-env ${quoteForShell(buildDir)};`,
+      `elif [ -f "./poky/oe-init-build-env" ]; then . ./poky/oe-init-build-env ${quoteForShell(buildDir)};`,
+      'else echo "__BSP_NO_OE_INIT__"; exit 2; fi;',
+    ]
+
+    if (machine) {
+      lines.push(`export MACHINE=${quoteForShell(machine)};`)
+    }
+
+    lines.push(`bitbake ${image}${extraArgs ? ` ${extraArgs}` : ''}`)
+    return lines.join('\n')
+  }, [serverProject?.path, config.buildDir, config.image, config.extraArgs, config.machine])
+
+  const applyPreset = (presetId: string) => {
+    const preset = BUILD_PRESETS.find((item) => item.id === presetId)
+    if (!preset) return
+    setConfig({ image: preset.target, extraArgs: preset.extraArgs })
+  }
 
   const handleStart = async () => {
     if (!activeProfile || !serverProject || !bspInitialized) return
@@ -254,7 +341,7 @@ function BuildPanel() {
           </div>
 
           <div className="mb-2 text-xs text-ide-text-muted">
-            Options: {optionsSource === 'quick' ? 'quick scan' : 'not loaded'}
+            Options: {optionsSource === 'quick' ? 'quick scan + presets' : 'presets only'}
             {optionsLoading ? ' (loading...)' : ''}
           </div>
           {optionsError && (
@@ -275,35 +362,59 @@ function BuildPanel() {
             </div>
 
             <div>
-              <label className="block text-xs text-ide-text-muted mb-1">Target (image/recipe)</label>
-              <input
-                list="bsp-target-options"
+              <label className="block text-xs text-ide-text-muted mb-1">Preset Commands</label>
+              <select
                 className="w-full px-2 py-1 bg-ide-hover border border-ide-border rounded text-ide-text"
-                value={config.image}
-                onChange={(e) => setConfig({ image: e.target.value })}
-                placeholder="core-image-minimal / fsl-image-auto / virtual/kernel"
-              />
-              <datalist id="bsp-target-options">
-                {targets.map((target) => (
-                  <option key={target} value={target} />
+                value={presetSelection}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (!value) return
+                  applyPreset(value)
+                  setPresetSelection('')
+                }}
+              >
+                <option value="">Select preset...</option>
+                {BUILD_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
                 ))}
-              </datalist>
+              </select>
+              <div className="mt-1 text-[11px] text-ide-text-muted">
+                Preset을 선택하면 Target/Extra Args가 자동 설정됩니다.
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-ide-text-muted mb-1">Target (image/recipe)</label>
+              <select
+                className="w-full px-2 py-1 bg-ide-hover border border-ide-border rounded text-ide-text"
+                value={selectedTarget}
+                onChange={(e) => setConfig({ image: e.target.value })}
+              >
+                <option value="">Select target...</option>
+                {targetOptions.map((target) => (
+                  <option key={target} value={target}>
+                    {target}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
               <label className="block text-xs text-ide-text-muted mb-1">Machine (optional)</label>
-              <input
-                list="bsp-machine-options"
+              <select
                 className="w-full px-2 py-1 bg-ide-hover border border-ide-border rounded text-ide-text"
-                value={config.machine}
+                value={selectedMachine}
                 onChange={(e) => setConfig({ machine: e.target.value })}
-                placeholder="(use local.conf)"
-              />
-              <datalist id="bsp-machine-options">
-                {machines.map((machine) => (
-                  <option key={machine} value={machine} />
+              >
+                <option value="">(use local.conf)</option>
+                {machineOptions.map((machine) => (
+                  <option key={machine} value={machine}>
+                    {machine}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
 
             <div>
@@ -312,8 +423,18 @@ function BuildPanel() {
                 className="w-full px-2 py-1 bg-ide-hover border border-ide-border rounded text-ide-text"
                 value={config.extraArgs}
                 onChange={(e) => setConfig({ extraArgs: e.target.value })}
-                placeholder="-k"
+                placeholder="-C compile / -k"
               />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-xs text-ide-text-muted mb-1">Command Preview</label>
+            <div className="rounded border border-ide-border bg-ide-hover/30 p-2 font-mono text-xs whitespace-pre-wrap">
+              {commandPreview}
+            </div>
+            <div className="mt-1 text-[11px] text-ide-text-muted">
+              실제 실행은 bash -lc 래핑과 PID 추적을 포함합니다.
             </div>
           </div>
 

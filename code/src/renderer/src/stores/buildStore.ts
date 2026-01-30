@@ -35,7 +35,7 @@ interface BuildState {
 
 const DEFAULT_CONFIG: BuildConfig = {
   buildDir: 'build',
-  image: 'core-image-minimal',
+  image: '',
   machine: '',
   extraArgs: '',
 }
@@ -63,8 +63,9 @@ export const useBuildStore = create<BuildState>((set, get) => ({
     try {
       const status = await window.electronAPI.build.start(payload)
       set({ status, isBuilding: status.isBuilding, isStopping: false })
-    } catch (err: any) {
-      set({ error: err?.message || '빌드 시작 실패', isBuilding: false })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Build start failed'
+      set({ error: message, isBuilding: false })
       throw err
     }
   },

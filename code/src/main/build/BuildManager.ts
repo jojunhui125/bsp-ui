@@ -9,7 +9,7 @@ import type { BuildJob, BuildStartRequest, BuildStatus, BuildLogEvent } from '..
 
 function quoteForShell(value: string): string {
   // POSIX single-quote escaping: ' -> '"'"'
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+  return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
 function assertSafeInput(name: string, value: string, pattern: RegExp): void {
@@ -147,16 +147,17 @@ export class BuildManager extends EventEmitter {
       } else {
         this.emitLog({ type: 'system', data: `[BUILD] Failed (exit code ${exitCode}).` })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       job.status = this.cancelRequested ? 'cancelled' : 'failed'
       job.endTime = new Date().toISOString()
       this.status = {
         isBuilding: false,
         job,
         lastExitCode: -1,
-        lastError: err?.message || 'Build failed',
+        lastError: err instanceof Error ? err.message : 'Build failed',
       }
-      this.emitLog({ type: 'system', data: `[BUILD] Error: ${err?.message || 'unknown'}` })
+      const message = err instanceof Error ? err.message : 'unknown'
+      this.emitLog({ type: 'system', data: `[BUILD] Error: ${message}` })
     } finally {
       this.activeJobId = null
       this.activePidFile = null
