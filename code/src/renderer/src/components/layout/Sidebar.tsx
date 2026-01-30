@@ -77,6 +77,16 @@ export function Sidebar() {
   // 서버 연결 시 서버 탐색기, 아니면 로컬 탐색기
   const isServerMode = connectionStatus.connected && serverProject
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as SidebarTab | undefined
+      if (!detail) return
+      setActiveTab(detail)
+    }
+    window.addEventListener('bsp-sidebar-tab', handler)
+    return () => window.removeEventListener('bsp-sidebar-tab', handler)
+  }, [])
+
   return (
     <div className="flex h-full">
       {/* 아이콘 탭 바 */}
