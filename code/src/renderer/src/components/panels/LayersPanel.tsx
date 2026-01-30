@@ -169,20 +169,24 @@ export function LayersPanel() {
 
   useEffect(() => {
     if (!menu) return
-    const handleClick = () => setMenu(null)
+    const handlePointerDown = (event: Event) => {
+      const target = event.target as Node | null
+      if (menuRef.current && target && menuRef.current.contains(target)) {
+        return
+      }
+      setMenu(null)
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenu(null)
       }
     }
-    window.addEventListener('click', handleClick)
-    window.addEventListener('contextmenu', handleClick)
-    window.addEventListener('scroll', handleClick, true)
+    window.addEventListener('mousedown', handlePointerDown, true)
+    window.addEventListener('scroll', handlePointerDown, true)
     window.addEventListener('keydown', handleKeyDown)
     return () => {
-      window.removeEventListener('click', handleClick)
-      window.removeEventListener('contextmenu', handleClick)
-      window.removeEventListener('scroll', handleClick, true)
+      window.removeEventListener('mousedown', handlePointerDown, true)
+      window.removeEventListener('scroll', handlePointerDown, true)
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [menu])
@@ -363,6 +367,7 @@ export function LayersPanel() {
             }}
             onOpenDirectory={(event) => {
               event.preventDefault()
+              event.stopPropagation()
               setMenu({ x: event.clientX, y: event.clientY, layer })
             }}
           />
