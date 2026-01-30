@@ -281,26 +281,10 @@ function BuildPanel() {
   const canBuild = canUsePanel && bspInitialized && Boolean(selectedTarget)
 
   const commandPreview = useMemo(() => {
-    const projectPath = serverProject?.path || '<project>'
-    const buildDir = config.buildDir.trim() || 'build'
     const image = config.image.trim() || '<select target>'
     const extraArgs = config.extraArgs.trim()
-    const machine = config.machine.trim()
-
-    const lines = [
-      `cd ${quoteForShell(projectPath)}`,
-      `if [ -f "oe-init-build-env" ]; then . ./oe-init-build-env ${quoteForShell(buildDir)};`,
-      `elif [ -f "./poky/oe-init-build-env" ]; then . ./poky/oe-init-build-env ${quoteForShell(buildDir)};`,
-      'else echo "__BSP_NO_OE_INIT__"; exit 2; fi;',
-    ]
-
-    if (machine) {
-      lines.push(`export MACHINE=${quoteForShell(machine)};`)
-    }
-
-    lines.push(`bitbake ${image}${extraArgs ? ` ${extraArgs}` : ''}`)
-    return lines.join('\n')
-  }, [serverProject?.path, config.buildDir, config.image, config.extraArgs, config.machine])
+    return `bitbake ${image}${extraArgs ? ` ${extraArgs}` : ''}`
+  }, [config.image, config.extraArgs])
 
   const applyPreset = (presetId: string) => {
     const preset = BUILD_PRESETS.find((item) => item.id === presetId)
@@ -432,9 +416,6 @@ function BuildPanel() {
             <label className="block text-xs text-ide-text-muted mb-1">Command Preview</label>
             <div className="rounded border border-ide-border bg-ide-hover/30 p-2 font-mono text-xs whitespace-pre-wrap">
               {commandPreview}
-            </div>
-            <div className="mt-1 text-[11px] text-ide-text-muted">
-              실제 실행은 bash -lc 래핑과 PID 추적을 포함합니다.
             </div>
           </div>
 

@@ -3,11 +3,13 @@
  * 서버에 연결된 프로젝트의 정보와 작업 패널
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useProjectStore } from '../../stores/projectStore'
 import { useSshStore } from '../../stores/sshStore'
 import { useIndexStore } from '../../stores/indexStore'
 import { useBuildStore } from '../../stores/buildStore'
+
+const quoteForShell = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`
 
 export function ServerDashboard() {
   const { serverProject, closeProject, bspInitialized, bspMachine, setBspInitialized, setBspMachine } = useProjectStore()
@@ -22,7 +24,9 @@ export function ServerDashboard() {
   const [loading, setLoading] = useState(false)
   const [useCustomInit, setUseCustomInit] = useState(false)
   const [customInitCommand, setCustomInitCommand] = useState('')
-  const [machineOptions] = useState<string[]>([
+  const [manualMachine, setManualMachine] = useState(false)
+  const [machinesLoading, setMachinesLoading] = useState(false)
+  const [machineOptions, setMachineOptions] = useState<string[]>([
     's32g274ardb2',
     's32g274ardb2ubuntu',
     's32g399ardb3',
@@ -34,6 +38,50 @@ export function ServerDashboard() {
   } | null>(null)
   const [savingToServer, setSavingToServer] = useState(false)
   const [pythonChecked, setPythonChecked] = useState(false)
+  const initMachineOptions = useMemo(() => {
+    if (!bspMachine) return machineOptions
+    return machineOptions.includes(bspMachine) ? machineOptions : [bspMachine, ...machineOptions]
+  }, [bspMachine, machineOptions])
+
+  const loadMachineOptions = useCallback(async () => {
+    if (!activeProfile || !serverProject || !connectionStatus.connected) return
+    setMachinesLoading(true)
+    try {
+      const base = `cd ${quoteForShell(serverProject.path)} &&`
+      const findCmd = `${base} find ./sources -type f -path "*/conf/machine/*.conf" -print 2>/dev/null | sed "s#.*/##" | sed "s/\\.conf$//" | sort -u`
+      const result = await window.electronAPI.ssh.exec(
+        activeProfile.id,
+        `bash -lc ${quoteForShell(findCmd)}`
+      )
+      const list = result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+      if (list.length > 0) {
+        setMachineOptions((prev) => {
+          const merged = Array.from(new Set([...prev, ...list]))
+          return merged.length === prev.length ? prev : merged
+        })
+      }
+    } catch {
+      // fallback to existing options
+    } finally {
+      setMachinesLoading(false)
+    }
+  }, [activeProfile, connectionStatus.connected, serverProject, quoteForShell])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      if (cancelled) return
+      await loadMachineOptions()
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [loadMachineOptions])
 
   // Python 사용 가능 여부 확인
   useEffect(() => {
@@ -336,17 +384,42 @@ export function ServerDashboard() {
                   <code className="flex-1 px-2 py-1 bg-ide-bg rounded text-xs text-ide-text font-mono">
                     source ./nxp-setup-alb.sh -m
                   </code>
-                  <input
-                    list="bsp-init-machine-options"
-                    value={bspMachine}
-                    onChange={(e) => setBspMachine(e.target.value)}
-                    className="px-2 py-1 bg-ide-bg border border-ide-border rounded text-xs text-ide-text"
-                  />
-                  <datalist id="bsp-init-machine-options">
-                    {machineOptions.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
+                  {manualMachine ? (
+                    <input
+                      value={bspMachine}
+                      onChange={(e) => setBspMachine(e.target.value)}
+                      placeholder="직접 입력"
+                      className="px-2 py-1 bg-ide-bg border border-ide-border rounded text-xs text-ide-text"
+                    />
+                  ) : (
+                    <select
+                      value={bspMachine}
+                      onChange={(e) => setBspMachine(e.target.value)}
+                      className="px-2 py-1 bg-ide-bg border border-ide-border rounded text-xs text-ide-text"
+                    >
+                      {initMachineOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    onClick={loadMachineOptions}
+                    disabled={machinesLoading || loading}
+                    className="px-2 py-1 text-xs bg-ide-hover border border-ide-border rounded text-ide-text-muted hover:text-ide-text hover:bg-ide-border transition-colors disabled:opacity-50"
+                    title="서버에서 머신 목록 다시 불러오기"
+                  >
+                    {machinesLoading ? '...' : '🔄'}
+                  </button>
+                  <label className="flex items-center gap-1 text-xs text-ide-text-muted">
+                    <input
+                      type="checkbox"
+                      checked={manualMachine}
+                      onChange={(e) => setManualMachine(e.target.checked)}
+                    />
+                    직접 입력
+                  </label>
                   <button
                     onClick={handleInitialize}
                     disabled={loading}
