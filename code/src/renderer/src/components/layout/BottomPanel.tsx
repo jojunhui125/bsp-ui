@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import { useLayoutStore } from '../../stores/layoutStore'
 
 type BottomTab = 'console' | 'problems' | 'output'
 
@@ -15,26 +16,36 @@ const tabs: { id: BottomTab; label: string }[] = [
 
 export function BottomPanel() {
   const [activeTab, setActiveTab] = useState<BottomTab>('console')
+  const { toggleBottomPanel } = useLayoutStore()
 
   return (
     <div className="flex flex-col h-full">
       {/* 탭 헤더 */}
-      <div className="flex items-center h-9 px-2 bg-ide-sidebar border-b border-ide-border">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`
-              px-3 py-1 text-xs uppercase tracking-wider transition-colors
-              ${activeTab === tab.id
-                ? 'text-ide-text border-b-2 border-ide-accent'
-                : 'text-ide-text-muted hover:text-ide-text'
-              }
-            `}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between h-9 px-2 bg-ide-sidebar border-b border-ide-border">
+        <div className="flex items-center">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                px-3 py-1 text-xs uppercase tracking-wider transition-colors
+                ${activeTab === tab.id
+                  ? 'text-ide-text border-b-2 border-ide-accent'
+                  : 'text-ide-text-muted hover:text-ide-text'
+                }
+              `}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={toggleBottomPanel}
+          className="px-2 py-1 text-xs text-ide-text-muted hover:text-ide-text hover:bg-ide-hover rounded"
+          title="하단 패널 숨기기"
+        >
+          내리기
+        </button>
       </div>
 
       {/* 탭 컨텐츠 */}

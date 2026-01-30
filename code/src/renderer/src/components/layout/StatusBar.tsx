@@ -6,11 +6,13 @@
 import { useState } from 'react'
 import { useProjectStore } from '../../stores/projectStore'
 import { useSshStore } from '../../stores/sshStore'
+import { useLayoutStore } from '../../stores/layoutStore'
 import { SshSettingsModal } from '../modals/SshSettingsModal'
 
 export function StatusBar() {
   const { currentProject } = useProjectStore()
   const { connectionStatus, activeProfile, disconnect } = useSshStore()
+  const { bottomPanelVisible, toggleBottomPanel } = useLayoutStore()
   const [showSshModal, setShowSshModal] = useState(false)
 
   const handleDisconnect = async () => {
@@ -60,6 +62,14 @@ export function StatusBar() {
 
       {/* 오른쪽 영역 */}
       <div className="flex items-center gap-3">
+        <button
+          onClick={toggleBottomPanel}
+          className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 transition-colors"
+          title="하단 패널 토글"
+        >
+          <span className="opacity-80">패널</span>
+          <span className="font-mono">{bottomPanelVisible ? 'v' : '^'}</span>
+        </button>
         <span className="opacity-70">Yocto BSP Studio v0.1.0</span>
       </div>
 
